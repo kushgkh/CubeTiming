@@ -1,1 +1,1 @@
-web: python read.py
+web: gunicorn read:server

@@ -1,0 +1,20 @@
+@font-face {
+  font-family: myFirstFont;
+  src: url(cube.ttf);
+}
+
+div {
+
+	font-family: "Georgia";
+} 
+
+
+h1 {
+  font-family: myFirstFont;
+}
+
+a {
+    color: #1EAEDB;
+    text-decoration: none;
+    cursor: pointer;
+}

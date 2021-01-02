@@ -18,14 +18,30 @@ external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
+
+colors = {
+    'background': '#e9f5eb',
+    'text': '##5a5a5a'
+}
+
+
+
+
+
 server = app.server
 
-app.layout = html.Div([
+app.layout = html.Div(style={'backgroundColor': colors['background']} ,children= [
+     html.H1(
+        children='TwistyPlot',
+        style={
+            'textAlign': 'center',
+        }
+    ),
     dcc.Upload(
         id='upload-data',
         children=html.Div([
-            'Drag and Drop or ',
-            html.A('Select Files')
+            'Drop or ',
+            html.A('Browse')
         ]),
         style={
             'width': '50%',
@@ -36,7 +52,9 @@ app.layout = html.Div([
             'borderRadius': '5px',
             'textAlign': 'center',
             'margin': '5% 25% 0% 25%',
-            'padding': '50px'
+            'padding': '50px',
+            'backgroundColor': '#f8f8f0',
+            'fontSize': 50
         },
         # Allow multiple files to be uploaded
         multiple=True
@@ -59,9 +77,14 @@ app.layout = html.Div([
 
     ),
 
+    html.Div(id='output-data-upload',
+        style={
 
-    html.Div(id='output-data-upload'),
-     html.Div(id='output-data-hist'),
+            'backgroundColor': '#f8f8f0'
+        }
+
+    ),
+    html.Div(id='output-data-hist'),
 ])
 
 
@@ -77,6 +100,65 @@ def formatDigit(num ):
         return "0" + str(num)
     return str(num)
 
+
+def extractCSTimer(times):
+    for time in times:
+       output = json.loads(time)
+
+
+    #Extract lists for penalty, time, scramble and date
+    results = list(zip(*output["session2"]))
+
+
+    #seperate penalty and time
+    out2 = list(zip(*results[0]))
+
+
+    #put them in dataframe
+    df = pd.DataFrame({"Penalty": out2[0] , "Time": out2[1]})
+
+
+    #Get total time using function
+    def totalTime(row):
+        if(row["Penalty"] >= 0):
+            return row["Penalty"] + row["Time"]
+        else:
+            return -1
+    df["TotTime"] = df.apply(totalTime , axis=1)
+
+
+    #Complete df
+    df["Scramble"] = results[1]
+    df["Date"] = results[3]
+
+    def toDatetime(time):
+        return datetime.datetime.fromtimestamp(time).strftime('%Y-%m-%d %H:%M:%S')
+    df["Date"] = pd.to_datetime(df["Date"].apply(toDatetime))
+
+    return df
+
+
+def extractTwistyTimer(times):
+    arr = {"TotTime": [] , "Scramble": [] , "Date" :  []}
+    with open("times.txt") as times:
+        for time in times:
+            parts = time.split(";")
+            arr["TotTime"].append(timeToMilis(parts[0].strip('\"')))
+            arr["Scramble"].append(parts[1].strip('\"'))
+            arr["Date"].append(parts[2].strip("\n").strip('\"'))
+    
+
+    df  = pd.DataFrame(arr)
+    df["Date"] = pd.to_datetime(df["Date"])
+    return df
+
+def postProcess(df):
+    df['YearMonth'] = df['Date'].map(lambda x: str(x.year) + "-" + formatDigit(x.month))
+    return df
+
+
+
+
 def make_graphic(contents, filename, isCount):
     content_type, content_string = contents.split(',')
 
@@ -87,57 +169,13 @@ def make_graphic(contents, filename, isCount):
         if 'txt' in filename:
             times = io.StringIO(decoded.decode('utf-8'))
             if 'cstimer' in filename:            
-                for time in times:
-                   output = json.loads(time)
-
-
-                #Extract lists for penalty, time, scramble and date
-                results = list(zip(*output["session2"]))
-
-
-                #seperate penalty and time
-                out2 = list(zip(*results[0]))
-
-
-                #put them in dataframe
-                df = pd.DataFrame({"Penalty": out2[0] , "Time": out2[1]})
-
-
-                #Get total time using function
-                def totalTime(row):
-                    if(row["Penalty"] >= 0):
-                        return row["Penalty"] + row["Time"]
-                    else:
-                        return -1
-                df["TotTime"] = df.apply(totalTime , axis=1)
-
-
-                #Complete df
-                df["Scramble"] = results[1]
-                df["Date"] = results[3]
-
-                def toDatetime(time):
-                    return datetime.datetime.fromtimestamp(time).strftime('%Y-%m-%d %H:%M:%S')
-                df["Date"] = pd.to_datetime(df["Date"].apply(toDatetime))
-
-
+                df = extractCSTimer(times)
 
             else:
-                arr = {"TotTime": [] , "Scramble": [] , "Date" :  []}
-                with open("times.txt") as times:
-                    for time in times:
-                        parts = time.split(";")
-                        arr["TotTime"].append(timeToMilis(parts[0].strip('\"')))
-                        arr["Scramble"].append(parts[1].strip('\"'))
-                        arr["Date"].append(parts[2].strip("\n").strip('\"'))
+                df = extractTwistyTimer(times)
                 
 
-                df  = pd.DataFrame(arr)
-                df["Date"] = pd.to_datetime(df["Date"])
-
-
-
-            df['YearMonth'] = df['Date'].map(lambda x: str(x.year) + "-" + formatDigit(x.month))
+            df = postProcess(df)
             grouped = df.groupby("YearMonth").mean()
 
             if(isCount):
@@ -149,7 +187,6 @@ def make_graphic(contents, filename, isCount):
                                "yaxis": {"title" : "Seconds"}}
                 })
             else:
-                
                 fig = dict({
                     "data": [{"type": "line",
                             "x" : grouped.index,
@@ -181,69 +218,21 @@ def make_hist(contents, filename):
         if 'txt' in filename:
             times = io.StringIO(decoded.decode('utf-8'))
             if 'cstimer' in filename:            
-                for time in times:
-                   output = json.loads(time)
-
-
-                #Extract lists for penalty, time, scramble and date
-                results = list(zip(*output["session2"]))
-
-
-                #seperate penalty and time
-                out2 = list(zip(*results[0]))
-
-
-                #put them in dataframe
-                df = pd.DataFrame({"Penalty": out2[0] , "Time": out2[1]})
-
-
-                #Get total time using function
-                def totalTime(row):
-                    if(row["Penalty"] >= 0):
-                        return row["Penalty"] + row["Time"]
-                    else:
-                        return -1
-                df["TotTime"] = df.apply(totalTime , axis=1)
-
-
-                #Complete df
-                df["Scramble"] = results[1]
-                df["Date"] = results[3]
-
-                def toDatetime(time):
-                    return datetime.datetime.fromtimestamp(time).strftime('%Y-%m-%d %H:%M:%S')
-                df["Date"] = pd.to_datetime(df["Date"].apply(toDatetime))
+                df = extractCSTimer(times)
 
 
 
             else:
-                arr = {"TotTime": [] , "Scramble": [] , "Date" :  []}
-                with open("times.txt") as times:
-                    for time in times:
-                        parts = time.split(";")
-                        arr["TotTime"].append(timeToMilis(parts[0].strip('\"')))
-                        arr["Scramble"].append(parts[1].strip('\"'))
-                        arr["Date"].append(parts[2].strip("\n").strip('\"'))
-                
-
-                df  = pd.DataFrame(arr)
-                df["Date"] = pd.to_datetime(df["Date"])
+                df = extractTwistyTimer(times)
 
 
-
-            df['YearMonth'] = df['Date'].map(lambda x: str(x.year) + "-" + formatDigit(x.month))
+            df = postProcess(df)
             grouped = df.groupby("YearMonth").mean()
 
 
 
             recent = df["TotTime"][-100:]/1000
             print(max(recent))
-            #rangeo = np.range(0, max(recent), max(recent)//10)
-            # counts, bins = np.histogram(recent, bins=range(0, max(recent), max(recent)//10))
-            # print(counts)
-            # print(bins)
-
-
 
            # fig = px.histogram(df, x="TotTime")
             fig = dict({

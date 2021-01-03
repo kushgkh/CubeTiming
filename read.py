@@ -65,17 +65,23 @@ app.layout = html.Div(style={'backgroundColor': colors['background']} ,children=
                 value='Count',
                 labelStyle={
                 'display': 'inline-block',
-                'margin': '15px',
+                'margin': '10px',
                 },
 
                 style={
 
                     'margin': '1% 40% 0% 50%',
-
-
                 }
 
     ),
+    dcc.Dropdown(
+                id="my-dynamic-dropdown",
+                style={
+
+                    'margin': '0% 45% 0% 45%',
+                }
+
+                ),
 
     html.Div(id='output-data-upload',
         style={
@@ -101,13 +107,17 @@ def formatDigit(num ):
     return str(num)
 
 
-def extractCSTimer(times):
+def extractCSTimer(times , sessionID):
     for time in times:
        output = json.loads(time)
 
-
+   
     #Extract lists for penalty, time, scramble and date
-    results = list(zip(*output["session2"]))
+    if(sessionID is None):
+        sessionID = list(output.keys())[0]
+
+    print("sessionID:" , sessionID)
+    results = list(zip(*output[sessionID]))
 
 
     #seperate penalty and time
@@ -157,20 +167,34 @@ def postProcess(df):
     return df
 
 
+def extractData(contents , filename):
+    content_type, content_string = contents.split(',')
+    decoded = base64.b64decode(content_string)
+    try: 
+        if 'txt' in filename:
+            return io.StringIO(decoded.decode('utf-8'))
+        else:
+            return -1
+    except Exception as e:
+        return -1
 
+def extractColNames(times , valid = True):
+    if not valid:
+        return []
+    for time in times:
+       output = json.loads(time)
+    return list(output.keys())
 
-def make_graphic(contents, filename, isCount):
+def make_graphic(contents, filename, isCount , sessionID):
     content_type, content_string = contents.split(',')
 
     decoded = base64.b64decode(content_string)
     try:
 
-
         if 'txt' in filename:
             times = io.StringIO(decoded.decode('utf-8'))
             if 'cstimer' in filename:            
-                df = extractCSTimer(times)
-
+                df = extractCSTimer(times , sessionID)
             else:
                 df = extractTwistyTimer(times)
                 
@@ -208,7 +232,7 @@ def make_graphic(contents, filename, isCount):
 
 
 
-def make_hist(contents, filename):
+def make_hist(contents, filename , sessionID):
     content_type, content_string = contents.split(',')
 
     decoded = base64.b64decode(content_string)
@@ -218,7 +242,7 @@ def make_hist(contents, filename):
         if 'txt' in filename:
             times = io.StringIO(decoded.decode('utf-8'))
             if 'cstimer' in filename:            
-                df = extractCSTimer(times)
+                df = extractCSTimer(times , sessionID)
 
 
 
@@ -257,21 +281,54 @@ def make_hist(contents, filename):
 
 @app.callback(Output('output-data-upload', 'children'),
               [Input('upload-data', 'contents'),
-              Input('yaxis-type' , 'value')],
+              Input('yaxis-type' , 'value'),
+              Input("my-dynamic-dropdown", "value")],
               [State('upload-data', 'filename')]
               )
-def update_output(list_of_contents, yLabel, list_of_names):
+def update_output(list_of_contents, yLabel, sessionID, list_of_names):
+    print("Hello")
     if list_of_contents is not None:
-        return make_graphic(list_of_contents[0] , list_of_names[0] , yLabel=="Count")
+        return make_graphic(list_of_contents[0] , list_of_names[0] , yLabel=="Count" ,  sessionID)
 
 @app.callback(Output('output-data-hist', 'children'),
               [Input('upload-data', 'contents'),
-              Input('yaxis-type' , 'value')],
+              Input('yaxis-type' , 'value'),
+              Input("my-dynamic-dropdown", "value")],
               [State('upload-data', 'filename')]
               )
-def update_hist(list_of_contents, yLabel, list_of_names):
+def update_hist(list_of_contents, yLabel, sessionID , list_of_names):
+    print(sessionID)
     if list_of_contents is not None:
-        return make_hist(list_of_contents[0] , list_of_names[0] )
+        return make_hist(list_of_contents[0] , list_of_names[0] , sessionID)
+####
+
+
+defaultOptions = [
+    {"label": "New York City", "value": "NYC"},
+    {"label": "Montreal", "value": "MTL"},
+    {"label": "San Francisco", "value": "SF"},
+]
+
+
+@app.callback(Output("my-dynamic-dropdown", "options"),
+              [Input('upload-data', 'contents')],
+              [State('upload-data', 'filename')]
+              )
+def update_options(list_of_contents, list_of_names):
+    if list_of_contents is not None:
+        output = extractData(list_of_contents[0] , list_of_names[0])
+        if(output != -1):
+            names = extractColNames(output ,  True)
+            options = []
+            for name in names[:-1]:
+                temp = {}
+                temp["label"] = name
+                temp["value"] = name
+                options.append(temp)
+            return [o for o in options]
+
+###hello
+    return [o for o in defaultOptions]
 
 
 

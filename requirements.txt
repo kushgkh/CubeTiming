@@ -3,5 +3,5 @@ pandas==1.1.2
 dash_table==4.6.2
 dash_core_components==1.9.1
 dash==1.11.0
-dash_html_components==1.0.3
+dash_html_components==2.0.0
 gunicorn==20.0.4
